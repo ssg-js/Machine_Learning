@@ -9,6 +9,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder
 
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from sklearn.tree import DecisionTreeClassifier
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
@@ -87,25 +92,45 @@ X_train, X_valid, y_train, y_valid = train_test_split(
     stratify=y,
 )
 
-model = Pipeline(
-    steps=[
-        ("preprocessor", preprocessor),
-        (
-            "classifier",
-            LogisticRegression(max_iter=1000),
-        ),
-    ]
-)
+classifiers = {
+    "Logistic Regression": LogisticRegression(
+        max_iter=1000
+    ),
+    "Decision Tree": DecisionTreeClassifier(
+        max_depth=4,
+        min_samples_split=10,
+        min_samples_leaf=5,
+        random_state=42,
+    ),
+    "Random Forest": RandomForestClassifier(
+        n_estimators=300,
+        max_depth=6,
+        min_samples_split=10,
+        min_samples_leaf=3,
+        random_state=42,
+        n_jobs=-1,
+    ),
+}
 
-model.fit(X_train, y_train)
+results = {}
 
-valid_predictions = model.predict(X_valid)
+for name, classifier in classifiers.items():
+    model = Pipeline(
+        steps=[
+            ("preprocessor", preprocessor),
+            ("classifier", classifier),
+        ]
+    )
 
-accuracy = accuracy_score(
-    y_valid,
-    valid_predictions,
-)
+    model.fit(X_train, y_train)
 
-print("학습 데이터 크기:", X_train.shape)
-print("검증 데이터 크기:", X_valid.shape)
-print(f"검증 정확도: {accuracy:.4f}")
+    predictions = model.predict(X_valid)
+
+    accuracy = accuracy_score(
+        y_valid,
+        predictions,
+    )
+
+    results[name] = accuracy
+
+    print(f"{name}: {accuracy:.4f}")
