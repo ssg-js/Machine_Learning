@@ -1,6 +1,13 @@
 from pathlib import Path
 
 import pandas as pd
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score
+from sklearn.model_selection import train_test_split
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import OneHotEncoder
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -9,77 +16,96 @@ DATA_DIR = BASE_DIR / "data"
 train_df = pd.read_csv(DATA_DIR / "train.csv")
 test_df = pd.read_csv(DATA_DIR / "test.csv")
 
-print(train_df.head())
+features = [
+    "Pclass",
+    "Sex",
+    "Age",
+    "SibSp",
+    "Parch",
+    "Fare",
+    "Embarked",
+]
 
-print("\n[train 데이터 크기]")
-print(train_df.shape)
+X = train_df[features]
+y = train_df["Survived"]
 
-print("\n[test 데이터 크기]")
-print(test_df.shape)
+numeric_features = [
+    "Age",
+    "SibSp",
+    "Parch",
+    "Fare",
+]
 
-print("\n[train 데이터 앞 5개]")
-print(train_df.head())
+categorical_features = [
+    "Pclass",
+    "Sex",
+    "Embarked",
+]
 
-print("\n[컬럼 목록]")
-print(train_df.columns)
-
-print("\n[데이터 타입과 결측값]")
-train_df.info()
-
-print("\n[컬럼별 결측값 개수]")
-print(train_df.isnull().sum())
-
-print("\n[생존 여부 개수]")
-print(train_df["Survived"].value_counts())
-
-print("\n[생존 여부 비율]")
-print(train_df["Survived"].value_counts(normalize=True))
-
-print("\n[성별 생존율]")
-print(train_df.groupby("Sex")["Survived"].mean())
-
-print("\n[객실 등급별 생존율]")
-print(train_df.groupby("Pclass")["Survived"].mean())
-
-print("\n[성별·객실 등급별 생존율]")
-print(train_df.groupby(["Sex", "Pclass"])["Survived"].mean())
-
-print("\n[성별·객실 등급별 생존율 표]")
-print(
-    train_df.pivot_table(
-        index="Sex",
-        columns="Pclass",
-        values="Survived",
-        aggfunc="mean",
-    )
+numeric_pipeline = Pipeline(
+    steps=[
+        (
+            "imputer",
+            SimpleImputer(strategy="median"),
+        ),
+    ]
 )
 
-print("\n[연령대별 생존율]")
-train_df["AgeGroup"] = pd.cut(
-    train_df["Age"],
-    bins=[0, 12, 18, 35, 60, 100],
-    labels=["Child", "Teen", "YoungAdult", "Adult", "Senior"],
-)
-print(
-    train_df.groupby(
-        "AgeGroup",
-        observed=False,
-    )["Survived"].mean()
-)
-
-print("\n[가족 규모별 생존율]")
-train_df["FamilySize"] = (
-    train_df["SibSp"]
-    + train_df["Parch"]
-    + 1
-)
-print(
-    train_df.groupby("FamilySize")["Survived"]
-    .agg(["count", "mean"])
+categorical_pipeline = Pipeline(
+    steps=[
+        (
+            "imputer",
+            SimpleImputer(strategy="most_frequent"),
+        ),
+        (
+            "encoder",
+            OneHotEncoder(handle_unknown="ignore"),
+        ),
+    ]
 )
 
-print("\n[혼자 탑승 여부별 생존율]")
-train_df["IsAlone"] = (
-    train_df["FamilySize"] == 1
-).astype(int)
-print(train_df.groupby("IsAlone")["Survived"].mean())
+preprocessor = ColumnTransformer(
+    transformers=[
+        (
+            "numeric",
+            numeric_pipeline,
+            numeric_features,
+        ),
+        (
+            "categorical",
+            categorical_pipeline,
+            categorical_features,
+        ),
+    ]
+)
+
+X_train, X_valid, y_train, y_valid = train_test_split(
+    X,
+    y,
+    test_size=0.2,
+    random_state=42,
+    stratify=y,
+)
+
+model = Pipeline(
+    steps=[
+        ("preprocessor", preprocessor),
+        (
+            "classifier",
+            LogisticRegression(max_iter=1000),
+        ),
+    ]
+)
+
+model.fit(X_train, y_train)
+
+valid_predictions = model.predict(X_valid)
+
+accuracy = accuracy_score(
+    y_valid,
+    valid_predictions,
+)
+
+print("학습 데이터 크기:", X_train.shape)
+print("검증 데이터 크기:", X_valid.shape)
+print(f"검증 정확도: {accuracy:.4f}")
